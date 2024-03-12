@@ -4,6 +4,7 @@ from aws_cdk import Stack
 from aws_cdk import aws_certificatemanager as acm
 from aws_cdk import aws_cloudfront as cf
 from aws_cdk import aws_cloudfront_origins as cf_origins
+from aws_cdk import aws_iam as iam
 from aws_cdk import aws_route53 as route53
 from aws_cdk import aws_route53_targets as route53_targets
 from aws_cdk import aws_s3 as s3
@@ -13,6 +14,7 @@ from constructs import Construct
 class CdnStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
+        self._fqdn = None
 
         cors_rule = s3.CorsRule(
             allowed_methods=[s3.HttpMethods.GET, s3.HttpMethods.HEAD],
@@ -24,9 +26,26 @@ class CdnStack(Stack):
         bucket = s3.Bucket(
             self,
             "WeirdSheepLabsCdnBucket",
+            bucket_name=os.environ["BUCKET_NAME"],
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
             access_control=s3.BucketAccessControl.PRIVATE,
             cors=[cors_rule],
+        )
+
+        bucket.add_to_resource_policy(
+            iam.PolicyStatement(
+                actions=["s3:*"],
+                resources=[bucket.bucket_arn, bucket.arn_for_objects("*")],
+                principals=[iam.AnyPrincipal()],  # type: ignore
+                conditions={
+                    "StringLike": {
+                        "aws:PrincipalArn": [
+                            f"arn:aws:iam::{self.account}:*",
+                            f"arn:aws:sts::{self.account}:*",  # Needed when authenticated with SSO
+                        ]
+                    }
+                },
+            )
         )
 
         certificate = acm.Certificate.from_certificate_arn(
@@ -39,7 +58,7 @@ class CdnStack(Stack):
             self,
             "WeirdSheepLabsCdnDistribution",
             default_behavior={"origin": cf_origins.S3Origin(bucket)},
-            domain_names=[os.environ["DOMAIN"]],
+            domain_names=[self.fqdn],
             certificate=certificate,
         )
 
@@ -57,6 +76,7 @@ class CdnStack(Stack):
             target=route53.RecordTarget.from_alias(
                 route53_targets.CloudFrontTarget(distribution)  # type: ignore
             ),
+            record_name=os.environ["SUBDOMAIN"],
         )
 
         route53.AaaaRecord(
@@ -66,4 +86,11 @@ class CdnStack(Stack):
             target=route53.RecordTarget.from_alias(
                 route53_targets.CloudFrontTarget(distribution)  # type: ignore
             ),
+            record_name=os.environ["SUBDOMAIN"],
         )
+
+    @property
+    def fqdn(self):
+        if not self._fqdn:
+            self._fqdn = f"{os.environ["SUBDOMAIN"]}.{os.environ["HOSTED_ZONE_NAME"]}"
+        return self._fqdn
