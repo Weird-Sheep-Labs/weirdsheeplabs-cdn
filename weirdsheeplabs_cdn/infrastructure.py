@@ -16,6 +16,7 @@ class CdnStack(Stack):
         super().__init__(scope, construct_id, **kwargs)
         self._fqdn = None
 
+        # Set up S3 bucket and access controls
         cors_rule = s3.CorsRule(
             allowed_methods=[s3.HttpMethods.GET, s3.HttpMethods.HEAD],
             allowed_headers=["*"],
@@ -41,19 +42,22 @@ class CdnStack(Stack):
                     "StringLike": {
                         "aws:PrincipalArn": [
                             f"arn:aws:iam::{self.account}:*",
-                            f"arn:aws:sts::{self.account}:*",  # Needed when authenticated with SSO
+                            # Needed for stack deployment when authenticated with AWS SSO
+                            f"arn:aws:sts::{self.account}:*",
                         ]
                     }
                 },
             )
         )
 
+        # Get SSL certificate
         certificate = acm.Certificate.from_certificate_arn(
             self,
             "WeirdSheepLabsCdnCertificate",
             certificate_arn=os.environ["CERTIFICATE_ARN"],
         )
 
+        # Create Cloudfront distribution
         distribution = cf.Distribution(
             self,
             "WeirdSheepLabsCdnDistribution",
@@ -62,6 +66,7 @@ class CdnStack(Stack):
             certificate=certificate,
         )
 
+        # Get existing hosted zone and create records for CDN subdomain
         zone = route53.HostedZone.from_hosted_zone_attributes(
             self,
             "WeirdSheepLabsHostedZone",
@@ -91,6 +96,9 @@ class CdnStack(Stack):
 
     @property
     def fqdn(self):
+        """
+        Forms the FQDN for the CDN subdomain.
+        """
         if not self._fqdn:
             self._fqdn = f"{os.environ["SUBDOMAIN"]}.{os.environ["HOSTED_ZONE_NAME"]}"
         return self._fqdn
