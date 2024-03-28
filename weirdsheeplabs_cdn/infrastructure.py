@@ -40,11 +40,7 @@ class CdnStack(Stack):
                 principals=[iam.AnyPrincipal()],  # type: ignore
                 conditions={
                     "StringLike": {
-                        "aws:PrincipalArn": [
-                            f"arn:aws:iam::{self.account}:*",
-                            # Needed for stack deployment when authenticated with AWS SSO
-                            f"arn:aws:sts::{self.account}:*",
-                        ]
+                        "aws:PrincipalArn": os.environ["BUCKET_USERS"].split(",")
                     }
                 },
             )
