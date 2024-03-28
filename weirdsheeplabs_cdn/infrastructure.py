@@ -61,7 +61,7 @@ class CdnStack(Stack):
         distribution = cf.Distribution(
             self,
             "WeirdSheepLabsCdnDistribution",
-            default_behavior={"origin": cf_origins.S3Origin(bucket)},
+            default_behavior=cf.BehaviorOptions(origin=cf_origins.S3Origin(bucket)),
             domain_names=[self.fqdn],
             certificate=certificate,
         )
