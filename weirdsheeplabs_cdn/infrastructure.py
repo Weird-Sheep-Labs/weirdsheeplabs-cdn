@@ -60,6 +60,7 @@ class CdnStack(Stack):
             default_behavior=cf.BehaviorOptions(origin=cf_origins.S3Origin(bucket)),
             domain_names=[self.fqdn],
             certificate=certificate,
+            web_acl_id=os.getenv("WAF_ARN"),
         )
 
         # Get existing hosted zone and create records for CDN subdomain
